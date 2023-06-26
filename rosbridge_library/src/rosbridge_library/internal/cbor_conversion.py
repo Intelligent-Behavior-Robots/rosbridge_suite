@@ -1,5 +1,8 @@
 import struct
 
+from numpy import float32, int16, int32, int64, int8
+import rosidl_parser.definition  
+
 try:
     from cbor import Tag
 except ImportError:
@@ -18,6 +21,7 @@ INT_TYPES = [
     "uint32",
     "int64",
     "uint64",
+    "int"
 ]
 FLOAT_TYPES = ["float32", "float64"]
 STRING_TYPES = ["string"]
@@ -42,6 +46,31 @@ TAGGED_ARRAY_FORMATS = {
 }
 
 
+
+basic_supported_types = [int8, int16, int32, int64, float32, bool]
+
+basic_supported_types_transform = {
+    "double": "float64",
+    "float": "float32",
+    "int": "int32",
+    "array": " "
+}
+
+array_supported_types = {
+    'b': "int8[]",
+    'B': "uint8[]",
+    'h': "int16[]",
+    'H': "uint16[]",
+    'i': "int32[]",
+    'I': "uint32[]",
+    'l': "int32[]",
+    'L': "uint32[]",
+    'q': "int64[]",
+    'Q': "uint64[]",
+    'f': "float32[]",
+    'd': "float64[]",
+}
+    
 def extract_cbor_values(msg):
     """Extract a dictionary of CBOR-friendly values from a ROS message.
 
@@ -50,8 +79,31 @@ def extract_cbor_values(msg):
     Typed arrays will be tagged and packed into byte arrays.
     """
     out = {}
-    for slot, slot_type in zip(msg.__slots__, msg._slot_types):
+    #for slot, slot_type in zip(msg.__slots__, msg._slot_types):
+    for slot, slot_type in zip(msg.__slots__, msg.SLOT_TYPES):
         val = getattr(msg, slot)
+
+        try:
+            if type(val) is str:
+                slot_type = "string"
+            elif any ([type(val) is t for t in basic_supported_types]):
+                slot_type = type(val).__name__ #"string"
+            elif type(val).__name__ in basic_supported_types_transform:
+                if type(val).__name__ == "array":
+                    slot_type = array_supported_types[val.typecode]
+                else:
+                    slot_type = basic_supported_types_transform[type(val).__name__]
+            # elif(hasattr(slot_type, "value_type") and slot_type.value_type is rosidl_parser.definition.UnboundedSequence):
+            #     slot_type = slot_type.value_type.name.lower()
+            else:
+                try:
+                    slot_type = slot_type.value_type.name.lower()
+                except:
+                    slot_type = slot_type.name.lower()
+        except Exception as e:
+            print(e)
+
+        slot = str(slot[1:])
 
         # string
         if slot_type in STRING_TYPES:
@@ -72,8 +124,8 @@ def extract_cbor_values(msg):
         # time/duration
         elif slot_type in TIME_TYPES:
             out[slot] = {
-                "secs": int(val.secs),
-                "nsecs": int(val.nsecs),
+                "secs": int(val.sec),
+                "nsecs": int(val.nanosec),
             }
 
         # byte array
